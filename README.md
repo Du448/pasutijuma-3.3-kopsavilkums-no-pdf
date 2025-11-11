@@ -1,0 +1,1 @@
+# pasutijuma-3.3-kopsavilkums-no-pdf
