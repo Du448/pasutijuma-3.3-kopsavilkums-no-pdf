@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pasūtījumu Apstrādes Rīks</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .loader {
+            border-top-color: #3498db;
+            -webkit-animation: spin 1s linear infinite;
+            animation: spin 1s linear infinite;
+        }
+        @-webkit-keyframes spin {
+            0% { -webkit-transform: rotate(0deg); }
+            100% { -webkit-transform: rotate(360deg); }
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        details > summary {
+            list-style: none;
+        }
+        details > summary::-webkit-details-marker {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+    <div class="container mx-auto max-w-4xl bg-white rounded-2xl shadow-lg p-6 md:p-8">
+        <div class="text-center mb-6 relative">
+            <h1 class="text-3xl font-bold text-gray-800">Pasūtījumu Apstrādes Rīks</h1>
+            <p class="text-gray-500 mt-2">Augšupielādējiet savu PDF vai Excel pasūtījuma failu, lai automātiski apstrādātu datus.</p>
+            <span class="absolute top-0 right-0 text-xs font-mono text-gray-400">v3.3</span>
+        </div>
+
+        <details class="bg-gray-50 rounded-lg p-4 mb-6 cursor-pointer">
+            <summary class="font-semibold text-gray-700 hover:text-blue-600">Parādīt Instrukciju</summary>
+            <div class="mt-4 text-gray-600 space-y-2">
+                <p>Programma automātiski apstrādā PDF/Excel pasūtījumu failus:</p>
+                <ul class="list-disc list-inside ml-4">
+                    <li>Saskaita preču daudzumus.</li>
+                    <li>Aprēķina kopējo svaru.</li>
+                    <li>Izveido kopsavilkumu bāzei.</li>
+                    <li>Ļauj nokopēt rezultātu.</li>
+                </ul>
+            </div>
+        </details>
+
+        <div class="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-8 text-center mb-6">
+            <input type="file" id="fileInput" class="hidden" accept=".pdf,.xls,.xlsx">
+            <div class="flex justify-center items-center space-x-4">
+                <button id="uploadButton" class="bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors duration-300 shadow-md">
+                    Izvēlēties Failu (PDF/Excel)
+                </button>
+                <button id="clearButton" class="bg-gray-500 text-white font-semibold py-3 px-6 rounded-lg hover:bg-gray-600 transition-colors duration-300 shadow-md hidden">
+                    Notīrīt
+                </button>
+            </div>
+            <p id="fileName" class="mt-4 text-gray-600"></p>
+        </div>
+        
+        <div id="loader" class="hidden flex justify-center items-center my-4">
+            <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12"></div>
+            <p class="ml-4 text-gray-700">Apstrādā datus...</p>
+        </div>
+
+        <div id="results" class="hidden space-y-8">
+            <!-- Prece, kas jāņem līdzi -->
+            <div id="driver-info-container" class="bg-gray-50 p-6 rounded-lg">
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h2 id="preceSectionTitle" class="text-2xl font-semibold text-gray-700"></h2>
+                    <div class="flex items-center space-x-2">
+                        <button id="copyDriverText" title="Kopēt kā tekstu" class="bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600 transition">
+                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        </button>
+                        <button id="copyDriverImage" title="Lejupielādēt kā attēlu" class="bg-purple-500 text-white p-2 rounded-md hover:bg-purple-600 transition">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="max-w-md mx-auto pb-16">
+                    <div class="grid grid-cols-1 gap-4">
+                        <div class="bg-white p-4 rounded-lg flex justify-between items-center shadow-sm border border-gray-300">
+                            <span class="font-bold text-gray-800 text-2xl uppercase">Priekšas</span>
+                            <span id="parastasPrieksasCount" class="font-bold text-4xl text-blue-600">0</span>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg flex justify-between items-center shadow-sm border border-gray-300">
+                            <span class="font-bold text-gray-800 text-2xl uppercase">Aizmugures</span>
+                            <span id="parastasAizmuguresCount" class="font-bold text-4xl text-blue-600">0</span>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg flex justify-between items-center shadow-sm border border-gray-300">
+                            <span class="font-bold text-gray-800 text-2xl uppercase">Priekšas <strong class="font-black text-3xl tracking-wider">SADALĪTAS</strong></span>
+                            <span id="sadalitasPrieksasCount" class="font-bold text-4xl text-red-600">0</span>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg flex justify-between items-center shadow-sm border border-gray-300">
+                            <span class="font-bold text-gray-800 text-2xl uppercase">Aizmugures <strong class="font-black text-3xl tracking-wider">SADALĪTAS</strong></span>
+                            <span id="sadalitasAizmuguresCount" class="font-bold text-4xl text-red-600">0</span>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg flex justify-between items-center shadow-sm border border-gray-300">
+                            <span id="subproduktiLabel" class="font-bold text-gray-800 text-2xl uppercase">Subprodukti (Subi)</span>
+                            <span id="subproduktiCount" class="font-bold text-4xl text-green-700">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Svara Aprēķins -->
+            <div>
+                <h2 class="text-2xl font-semibold text-gray-700 mb-4 border-b pb-2">Svara Aprēķins</h2>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <div class="bg-blue-100 p-4 rounded-lg text-center lg:col-span-2 flex flex-col justify-center">
+                         <p class="text-xl font-medium text-gray-800">
+                             Gaļas svars: <span id="galasSvarsDisplay" class="font-bold">0</span> kg + 
+                             Subproduktu svars: <span id="subproduktuSvarsDisplay" class="font-bold">0</span> kg = 
+                             <strong class="text-blue-700">Kopējais svars: <span id="kopējaisSvarsDisplay" class="font-bold">0</span> kg</strong>
+                         </p>
+                    </div>
+                    <div class="bg-blue-200 p-4 rounded-lg text-center flex flex-col justify-center">
+                        <h3 class="font-medium text-gray-800">Kopā cūkās (pēc svara):</h3>
+                        <p class="text-3xl font-bold text-blue-800 mt-1"><span id="kopaCukasSvars">0</span> cūkas</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kopsavilkums Bāzei -->
+            <div>
+                 <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h2 class="text-2xl font-semibold text-gray-700">Kopsavilkums Bāzei</h2>
+                    <button id="copyButton" class="bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors duration-300 flex items-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                        Kopēt
+                    </button>
+                </div>
+                <div id="kopsavilkumsContent" class="bg-gray-100 p-6 rounded-lg space-y-3">
+                    <h3 id="pasutijumaDatums" class="text-xl font-bold text-gray-800 text-center"></h3>
+                    <div class="text-lg">
+                        <p id="kopaCukasKomplektiRow"><span class="font-semibold">Cūkas</span> - <span id="kopaCukasKomplekti">0</span></p>
+                        <p id="kopaPuscukasKomplektiRow"><span class="font-semibold">Puscūkas</span> - <span id="kopaPuscukasKomplekti">0</span></p>
+                        <p id="atlikumsPrieksasRow"><span class="font-semibold">Priekšas</span> - <span id="atlikumsPrieksas">0</span></p>
+                        <p id="atlikumsAizmuguresRow"><span class="font-semibold">Aizmugures</span> - <span id="atlikumsAizmugures">0</span></p>
+                    </div>
+                    <div id="sadalitsSection" class="pt-4 mt-4 border-t border-gray-300 text-lg">
+                        <p class="font-semibold">No tā sadalīts:</p>
+                        <ul class="list-disc list-inside ml-4">
+                            <li id="sadalitasPrieksasKopsavilkumsRow">Sadalītas priekšas - <span id="sadalitasPrieksasKopsavilkums">0</span></li>
+                            <li id="sadalitasAizmuguresKopsavilkumsRow">Sadalītas aizmugures - <span id="sadalitasAizmuguresKopsavilkums">0</span></li>
+                        </ul>
+                    </div>
+                     <div id="subproduktiSection" class="pt-4 mt-4 border-t border-gray-300 text-lg">
+                        <p><span class="font-semibold">Subproduktu komplekti</span> - <span id="subproduktiKopsavilkums">0</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="error" class="hidden mt-6 text-center bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg" role="alert">
+            <strong class="font-bold">Kļūda!</strong>
+            <span class="block sm:inline" id="errorMessage"></span>
+        </div>
+
+        <div class="text-center mt-8 text-xs font-mono text-gray-400">
+            v3.3
+        </div>
+    </div>
+
+    <!-- Modal for Subprodukti -->
+    <div id="subproduktiModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3 text-center">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">Apstipriniet Subproduktu Daudzumu</h3>
+                <div class="mt-2 px-7 py-3">
+                    <p class="text-sm text-gray-500 mb-4">
+                        Programma automātiski atrada <strong id="detectedSubprodukti">0</strong> pasūtītus subproduktus. Lūdzu, apstipriniet vai izlabojiet daudzumu un pievienojiet liekos subproduktus, ja tādi ir.
+                    </p>
+                    <div class="mb-4 text-left">
+                        <label for="orderedSubproduktiInput" class="block text-sm font-medium text-gray-700">Pasūtītie subprodukti:</label>
+                        <input type="number" id="orderedSubproduktiInput" value="0" min="0" class="mt-1 p-2 border block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                     <div class="mb-4 text-left">
+                        <label for="extraSubproduktiInput" class="block text-sm font-medium text-gray-700">Liekie subprodukti (pārdošanai):</label>
+                        <input type="number" id="extraSubproduktiInput" value="0" min="0" class="mt-1 p-2 border block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                </div>
+                <div class="items-center px-4 py-3">
+                    <button id="confirmSubproduktiButton" class="px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        Apstiprināt
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // Set the workerSrc for pdf.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js';
+
+        const uploadButton = document.getElementById('uploadButton');
+        const clearButton = document.getElementById('clearButton');
+        const fileInput = document.getElementById('fileInput');
+        const fileNameDisplay = document.getElementById('fileName');
+        const loader = document.getElementById('loader');
+        const results = document.getElementById('results');
+        const error = document.getElementById('error');
+        const errorMessage = document.getElementById('errorMessage');
+        const copyButton = document.getElementById('copyButton');
+        const copyDriverTextButton = document.getElementById('copyDriverText');
+        const copyDriverImageButton = document.getElementById('copyDriverImage');
+
+        let finalOrderedSubprodukti = 0;
+        let finalExtraSubprodukti = 0;
+
+        uploadButton.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', handleFileSelect, false);
+        copyButton.addEventListener('click', copySummary);
+        clearButton.addEventListener('click', clearFields);
+        copyDriverTextButton.addEventListener('click', copyDriverInfoAsText);
+        copyDriverImageButton.addEventListener('click', copyDriverInfoAsImage);
+
+
+        async function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                return;
+            }
+            
+            fileNameDisplay.textContent = `Izvēlētais fails: ${file.name}`;
+            results.classList.add('hidden');
+            error.classList.add('hidden');
+            loader.classList.remove('hidden');
+            clearButton.classList.add('hidden');
+
+            try {
+                const fileNameLower = file.name.toLowerCase();
+                const fileReader = new FileReader();
+
+                if (fileNameLower.endsWith('.pdf')) {
+                    fileReader.onload = async function() {
+                        const typedarray = new Uint8Array(this.result);
+                        const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                        let fullText = '';
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i);
+                            const textContent = await page.getTextContent();
+                            fullText += textContent.items.map(item => item.str).join(' ');
+                        }
+                        processText(fullText, file.name);
+                    };
+                    fileReader.readAsArrayBuffer(file);
+                } else if (fileNameLower.endsWith('.xls') || fileNameLower.endsWith('.xlsx')) {
+                    fileReader.onload = function(e) {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, {type: 'array'});
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const json = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                        let fullText = json.map(row => row.join(' ')).join(' ');
+                        processText(fullText, file.name);
+                    };
+                    fileReader.readAsArrayBuffer(file);
+                } else {
+                    throw new Error("Lūdzu, augšupielādējiet PDF vai Excel failu.");
+                }
+            } catch (err) {
+                showError(err.message);
+            }
+        }
+        
+        function processText(text, filename) {
+            text = text.toLowerCase();
+            
+            // --- 1. Pasūtījumu Daudzums (bez subproduktiem) ---
+            let prieksas = (text.match(/prieksa/g) || []).length;
+            let aizmugures = (text.match(/aizmugure/g) || []).length;
+            let puscukas = (text.match(/puscuka/g) || []).length;
+            let sadalitasPuscukas = (text.match(/puscuka sadalita/g) || []).length;
+            let sadalitasPrieksas = (text.match(/prieksa sadalita/g) || []).length;
+            let sadalitasAizmugures = (text.match(/aizmugure sadalita/g) || []).length;
+            let detectedSubprodukti = (text.match(/subi/g) || []).length;
+
+            puscukas -= sadalitasPuscukas; 
+            prieksas -= sadalitasPrieksas; 
+            aizmugures -= sadalitasAizmugures; 
+            
+            let parastasPrieksas = prieksas + puscukas;
+            let parastasAizmugures = aizmugures + puscukas;
+            let totalSadalitasPrieksas = sadalitasPrieksas + sadalitasPuscukas;
+            let totalSadalitasAizmugures = sadalitasAizmugures + sadalitasPuscukas;
+
+            const processingData = {
+                text, filename, parastasPrieksas, parastasAizmugures, 
+                totalSadalitasPrieksas, totalSadalitasAizmugures
+            };
+
+            showSubproduktiModal(detectedSubprodukti, processingData);
+        }
+
+        function showSubproduktiModal(detectedCount, data) {
+            const modal = document.getElementById('subproduktiModal');
+            document.getElementById('detectedSubprodukti').textContent = detectedCount;
+            const orderedInput = document.getElementById('orderedSubproduktiInput');
+            orderedInput.value = detectedCount;
+            document.getElementById('extraSubproduktiInput').value = 0;
+            
+            modal.classList.remove('hidden');
+
+            const confirmButton = document.getElementById('confirmSubproduktiButton');
+            
+            const newConfirmButton = confirmButton.cloneNode(true);
+            confirmButton.parentNode.replaceChild(newConfirmButton, confirmButton);
+
+            newConfirmButton.addEventListener('click', () => {
+                const ordered = parseInt(document.getElementById('orderedSubproduktiInput').value, 10) || 0;
+                const extra = parseInt(document.getElementById('extraSubproduktiInput').value, 10) || 0;
+                modal.classList.add('hidden');
+                
+                finalizeProcessing({ ...data, orderedSubprodukti: ordered, extraSubprodukti: extra });
+            }, { once: true });
+        }
+
+        function finalizeProcessing(data) {
+            const { 
+                text, filename, parastasPrieksas, parastasAizmugures, 
+                totalSadalitasPrieksas, totalSadalitasAizmugures,
+                orderedSubprodukti, extraSubprodukti
+            } = data;
+            
+            finalOrderedSubprodukti = orderedSubprodukti;
+            finalExtraSubprodukti = extraSubprodukti;
+
+            // --- Atjaunot šofera info ---
+            document.getElementById('parastasPrieksasCount').textContent = parastasPrieksas;
+            document.getElementById('parastasAizmuguresCount').textContent = parastasAizmugures;
+            document.getElementById('sadalitasPrieksasCount').textContent = totalSadalitasPrieksas;
+            document.getElementById('sadalitasAizmuguresCount').textContent = totalSadalitasAizmugures;
+            
+            const subproduktiCountEl = document.getElementById('subproduktiCount');
+            const subproduktiLabel = document.getElementById('subproduktiLabel');
+
+            if (extraSubprodukti > 0) {
+                // Ja ir liekie subprodukti, samazinam fontu, lai ietilptu
+                subproduktiLabel.classList.remove('text-2xl');
+                subproduktiLabel.classList.add('text-xl');
+                const totalSubprodukti = orderedSubprodukti + extraSubprodukti;
+                subproduktiCountEl.innerHTML = `${orderedSubprodukti} <span class="text-gray-400 mx-1">+</span> ${extraSubprodukti} <span class="text-gray-400 mx-1">=</span> <span class="text-blue-600 font-bold text-4xl">${totalSubprodukti}</span>`;
+            } else {
+                // Ja nav, lietojam lielo fontu
+                subproduktiLabel.classList.remove('text-xl');
+                subproduktiLabel.classList.add('text-2xl');
+                subproduktiCountEl.innerHTML = orderedSubprodukti;
+            }
+            
+            let totalPrieksas = parastasPrieksas + totalSadalitasPrieksas;
+            let totalAizmugures = parastasAizmugures + totalSadalitasAizmugures;
+            const subproduktiForDriver = orderedSubprodukti + extraSubprodukti;
+
+            // --- 2. Svara Aprēķins ---
+            const svarsPrieksaAizmugure = 20; // kg
+            const svarsSubprodukts = 10; // kg
+            
+            const galasSvars = (totalPrieksas + totalAizmugures) * svarsPrieksaAizmugure;
+            const subproduktuSvars = subproduktiForDriver * svarsSubprodukts;
+            const kopējaisSvars = galasSvars + subproduktuSvars;
+            const kopaCukasSvars = galasSvars / 80;
+
+            document.getElementById('galasSvarsDisplay').textContent = galasSvars;
+            document.getElementById('subproduktuSvarsDisplay').textContent = subproduktuSvars;
+            document.getElementById('kopējaisSvarsDisplay').textContent = kopējaisSvars;
+            document.getElementById('kopaCukasSvars').textContent = kopaCukasSvars.toFixed(2);
+            
+            // --- Datums un Diena ---
+            const dateMatch = filename.match(/(\d{4})[._-](\d{2})[._-](\d{2})/);
+            let datums = "Nenoteikts datums";
+            let diena = "";
+
+            if (dateMatch) {
+                datums = `${dateMatch[3]}.${dateMatch[2]}.${dateMatch[1]}`;
+                try {
+                    // Izveidojam datuma objektu, lai atrastu nedēļas dienu
+                    const year = parseInt(dateMatch[1], 10);
+                    const month = parseInt(dateMatch[2], 10) - 1; // JS mēneši ir 0-indeksēti
+                    const day = parseInt(dateMatch[3], 10);
+                    const dateObj = new Date(Date.UTC(year, month, day));
+                    
+                    if (!isNaN(dateObj.getTime())) {
+                        const dienas = ["Svētdiena", "Pirmdiena", "Otrdiena", "Trešdiena", "Ceturtdiena", "Piektdiena", "Sestdiena"];
+                        diena = `(${dienas[dateObj.getUTCDay()]})`;
+                    }
+                } catch(e) {
+                     console.error("Kļūda aprēķinot nedēļas dienu:", e);
+                }
+            }
+            
+            // Fallback: Ja diena netika aprēķināta no datuma, mēģiniet to atrast tekstā
+            if (!diena) {
+                 const dienasRegex = /(pirmdiena|otrdiena|trešdiena|tresdiena|ceturtdiena|piektdiena|sestdiena|svētdiena|svetdiena)/i;
+                 let dienasMatch = filename.match(dienasRegex);
+                 if (!dienasMatch) {
+                     dienasMatch = text.match(dienasRegex);
+                 }
+
+                 if (dienasMatch) {
+                     let foundDay = dienasMatch[0].toLowerCase()
+                         .replace('tresdiena', 'trešdiena')
+                         .replace('svetdiena', 'svētdiena');
+                     diena = `(${foundDay.charAt(0).toUpperCase() + foundDay.slice(1)})`;
+                 }
+            }
+
+
+            document.getElementById('preceSectionTitle').textContent = `Prece, kas jāņem līdzi | ${datums} ${diena}`;
+            document.getElementById('pasutijumaDatums').textContent = `Pasūtījums uz ${datums} ${diena}`;
+            
+            // --- 3. Kopsavilkums Bāzei ---
+            let remPrieksas = totalPrieksas;
+            let remAizmugures = totalAizmugures;
+            
+            let cukasKomplekti = Math.min(Math.floor(remPrieksas / 2), Math.floor(remAizmugures / 2));
+            remPrieksas -= cukasKomplekti * 2;
+            remAizmugures -= cukasKomplekti * 2;
+            
+            let puscukasKomplekti = Math.min(remPrieksas, remAizmugures);
+            remPrieksas -= puscukasKomplekti;
+            remAizmugures -= puscukasKomplekti;
+            
+            document.getElementById('kopaCukasKomplekti').textContent = cukasKomplekti;
+            document.getElementById('kopaPuscukasKomplekti').textContent = puscukasKomplekti;
+            document.getElementById('atlikumsPrieksas').textContent = remPrieksas;
+            document.getElementById('atlikumsAizmugures').textContent = remAizmugures;
+            document.getElementById('sadalitasPrieksasKopsavilkums').textContent = totalSadalitasPrieksas;
+            document.getElementById('sadalitasAizmuguresKopsavilkums').textContent = totalSadalitasAizmugures;
+            
+            const totalSubproduktiForBase = orderedSubprodukti + extraSubprodukti;
+            document.getElementById('subproduktiKopsavilkums').textContent = totalSubproduktiForBase; // Pasūtītie + Liekie
+            
+            document.getElementById('kopaCukasKomplektiRow').style.display = cukasKomplekti > 0 ? 'block' : 'none';
+            document.getElementById('kopaPuscukasKomplektiRow').style.display = puscukasKomplekti > 0 ? 'block' : 'none';
+            document.getElementById('atlikumsPrieksasRow').style.display = remPrieksas > 0 ? 'block' : 'none';
+            document.getElementById('atlikumsAizmuguresRow').style.display = remAizmugures > 0 ? 'block' : 'none';
+            document.getElementById('sadalitasPrieksasKopsavilkumsRow').style.display = totalSadalitasPrieksas > 0 ? 'list-item' : 'none';
+            document.getElementById('sadalitasAizmuguresKopsavilkumsRow').style.display = totalSadalitasAizmugures > 0 ? 'list-item' : 'none';
+            document.getElementById('sadalitsSection').style.display = (totalSadalitasPrieksas > 0 || totalSadalitasAizmugures > 0) ? 'block' : 'none';
+            document.getElementById('subproduktiSection').style.display = totalSubproduktiForBase > 0 ? 'block' : 'none';
+
+            loader.classList.add('hidden');
+            results.classList.remove('hidden');
+            clearButton.classList.remove('hidden');
+        }
+        
+        function showError(message) {
+            errorMessage.textContent = message;
+            error.classList.remove('hidden');
+            loader.classList.add('hidden');
+            results.classList.add('hidden');
+            clearButton.classList.remove('hidden');
+        }
+        
+        function clearFields() {
+            fileInput.value = '';
+            fileNameDisplay.textContent = '';
+            results.classList.add('hidden');
+            error.classList.add('hidden');
+            clearButton.classList.add('hidden');
+
+            const fieldsToReset = [
+                'parastasPrieksasCount', 'parastasAizmuguresCount', 'sadalitasPrieksasCount',
+                'sadalitasAizmuguresCount', 'subproduktiCount', 'galasSvarsDisplay', 'subproduktuSvarsDisplay',
+                'kopējaisSvarsDisplay', 'kopaCukasSvars', 'kopaCukasKomplekti', 'kopaPuscukasKomplekti', 'atlikumsPrieksas',
+                'atlikumsAizmugures', 'sadalitasPrieksasKopsavilkums', 'sadalitasAizmuguresKopsavilkums',
+                'subproduktiKopsavilkums'
+            ];
+
+            fieldsToReset.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = '0';
+            });
+            
+            const subproduktiLabel = document.getElementById('subproduktiLabel');
+            if (subproduktiLabel) {
+                 subproduktiLabel.classList.remove('text-xl');
+                 subproduktiLabel.classList.add('text-2xl');
+            }
+
+            finalOrderedSubprodukti = 0;
+            finalExtraSubprodukti = 0;
+
+            document.getElementById('preceSectionTitle').textContent = '';
+            document.getElementById('pasutijumaDatums').textContent = '';
+
+            const rowsToShow = [
+                'kopaCukasKomplektiRow', 'kopaPuscukasKomplektiRow', 'atlikumsPrieksasRow',
+                'atlikumsAizmuguresRow', 'sadalitsSection', 'subproduktiSection'
+            ];
+            rowsToShow.forEach(id => document.getElementById(id).style.display = 'block');
+            
+            const listItemsToShow = ['sadalitasPrieksasKopsavilkumsRow', 'sadalitasAizmuguresKopsavilkumsRow'];
+            listItemsToShow.forEach(id => document.getElementById(id).style.display = 'list-item');
+        }
+
+        function copySummary() {
+            const lines = [];
+            
+            lines.push(document.getElementById('pasutijumaDatums').textContent.trim());
+            lines.push('');
+
+            const cukas = parseInt(document.getElementById('kopaCukasKomplekti').textContent);
+            if (cukas > 0) lines.push(`Cūkas - ${cukas}`);
+            
+            const puscukas = parseInt(document.getElementById('kopaPuscukasKomplekti').textContent);
+            if (puscukas > 0) lines.push(`Puscūkas - ${puscukas}`);
+
+            const prieksas = parseInt(document.getElementById('atlikumsPrieksas').textContent);
+            if (prieksas > 0) lines.push(`Priekšas - ${prieksas}`);
+
+            const aizmugures = parseInt(document.getElementById('atlikumsAizmugures').textContent);
+            if (aizmugures > 0) lines.push(`Aizmugures - ${aizmugures}`);
+
+            const sadalitasP = parseInt(document.getElementById('sadalitasPrieksasKopsavilkums').textContent);
+            const sadalitasA = parseInt(document.getElementById('sadalitasAizmuguresKopsavilkums').textContent);
+
+            if (sadalitasP > 0 || sadalitasA > 0) {
+                lines.push(''); 
+                lines.push("No tā sadalīts:");
+                lines.push(''); 
+                if (sadalitasP > 0) lines.push(`Sadalītas priekšas - ${sadalitasP}`);
+                if (sadalitasA > 0) lines.push(`Sadalītas aizmugures - ${sadalitasA}`);
+            }
+
+            const subi = parseInt(document.getElementById('subproduktiKopsavilkums').textContent);
+            if (subi > 0) {
+                lines.push('');
+                lines.push(`Subproduktu komplekti - ${subi}`);
+            }
+
+            const textToCopy = lines.join('\n');
+            copyToClipboard(textToCopy, copyButton, 'Kopēt');
+        }
+
+        function copyDriverInfoAsText() {
+            const lines = [];
+            const title = document.getElementById('preceSectionTitle').textContent.trim().replace(' |', ',');
+            lines.push(title);
+            lines.push('');
+
+            const items = [
+                { name: "PRIEKŠAS", count: document.getElementById('parastasPrieksasCount').textContent },
+                { name: "AIZMUGURES", count: document.getElementById('parastasAizmuguresCount').textContent },
+                { name: "PRIEKŠAS SADALĪTAS", count: document.getElementById('sadalitasPrieksasCount').textContent },
+                { name: "AIZMUGURES SADALĪTAS", count: document.getElementById('sadalitasAizmuguresCount').textContent }
+            ];
+
+            items.forEach(item => {
+                const count = parseInt(item.count);
+                if (count > 0) {
+                    lines.push(`${item.name} - ${count}`);
+                }
+            });
+
+            if (finalOrderedSubprodukti > 0 || finalExtraSubprodukti > 0) {
+                let subLine = `SUBPRODUKTI (SUBI) - ${finalOrderedSubprodukti}`;
+                if (finalExtraSubprodukti > 0) {
+                    const total = finalOrderedSubprodukti + finalExtraSubprodukti;
+                    subLine += ` + ${finalExtraSubprodukti} = ${total}`;
+                }
+                lines.push(subLine);
+            }
+            
+            const textToCopy = lines.join('\n');
+            copyToClipboard(textToCopy, copyDriverTextButton);
+        }
+
+        function downloadBlob(blob) {
+            const link = document.createElement('a');
+            const date = new Date().toISOString().slice(0, 10);
+            link.download = `pasutijums-${date}.png`;
+            link.href = URL.createObjectURL(blob);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+        }
+
+        async function copyDriverInfoAsImage() {
+            const node = document.getElementById('driver-info-container');
+            const button = copyDriverImageButton;
+            const originalHTML = button.innerHTML;
+            const originalTitle = button.title;
+
+            function setButtonFeedback(newHTML, newTitle, duration = 3000) {
+                button.innerHTML = newHTML;
+                button.title = newTitle;
+                setTimeout(() => {
+                    button.innerHTML = originalHTML;
+                    button.title = originalTitle;
+                }, duration);
+            }
+            
+            const successIcon = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+
+            try {
+                const canvas = await html2canvas(node, {
+                    backgroundColor: "#f9fafb",
+                    scale: 2
+                });
+
+                canvas.toBlob((blob) => {
+                    if (!blob) {
+                        console.error("Canvas to Blob conversion failed.");
+                        setButtonFeedback(originalHTML, "Kļūda veidojot attēlu!");
+                        return;
+                    }
+                    // Directly download the blob, bypassing the clipboard API due to permissions policy.
+                    downloadBlob(blob);
+                    setButtonFeedback(successIcon, "Fails lejupielādēts!");
+                }, 'image/png');
+
+            } catch (canvasError) {
+                console.error('Error generating canvas for image:', canvasError);
+                setButtonFeedback(originalHTML, "Kļūda veidojot attēlu!");
+            }
+        }
+
+        function copyToClipboard(text, button, originalText = null) {
+            const originalHTML = button.innerHTML;
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                let successIcon = `<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+                if (originalText) { // Main copy button
+                    button.innerHTML = `${successIcon} Nokopēts!`;
+                } else { // Icon button
+                    button.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+                }
+
+                setTimeout(() => {
+                    button.innerHTML = originalHTML;
+                }, 2000);
+            } catch (err) {
+                console.error('Kļūda kopējot tekstu: ', err);
+            }
+            document.body.removeChild(textarea);
+        }
+
+    </script>
+</body>
+</html>
+
